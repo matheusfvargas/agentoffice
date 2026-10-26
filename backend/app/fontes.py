@@ -16,7 +16,18 @@ from . import config
 
 EXTENSOES = {".pdf", ".docx", ".txt", ".md"}
 TAMANHO_TRECHO = 1500
-ARTIGO = re.compile(r"^\s*(Art\.?\s*\d+[\w-]*[º°o]?)", re.MULTILINE | re.IGNORECASE)
+# Início de artigo: "Art." com maiúscula no começo da linha. Referências no meio do
+# texto ("nos termos do art. 15") usam minúscula e, num PDF, podem cair no começo de
+# uma linha quebrada; por isso a busca não ignora maiúsculas.
+ARTIGO = re.compile(r"^\s*(Art\.\s*\d+(?:-[A-Z])?\s*[º°o]?)(?=[\s.\-–])", re.MULTILINE)
+# Pedido de um dispositivo específico: "art. 15", "artigo 15, V", "art 3º, § 2º".
+PEDIDO_DISPOSITIVO = re.compile(
+    r"\bart(?:igo)?\.?\s*(\d+)(?:-([a-z]))?\s*[º°o]?"
+    r"(?:\s*,?\s*(?:inciso\s+)?([IVXLC]+)\b)?"
+    r"(?:\s*,?\s*(?:§|par[aá]grafo)\s*(\d+|[uú]nico))?",
+    re.IGNORECASE,
+)
+INICIO_INCISO = re.compile(r"^\s*([IVXLC]+)\s*[-–—]\s*", re.MULTILINE)
 PALAVRAS_VAZIAS = set(
     "a o as os de da do das dos em no na nos nas um uma uns umas e ou que com por para "
     "pelo pela pelos pelas se sobre como mais ao aos à às é ser foi são seu sua seus suas "
@@ -71,7 +82,7 @@ def dividir_em_trechos(texto: str) -> list[tuple[str, str]]:
             trechos += _fatiar("Preâmbulo", texto[: inicios[0].start()])
         for atual, proximo in zip(inicios, inicios[1:] + [None]):
             fim = proximo.start() if proximo else len(texto)
-            rotulo = re.sub(r"\s+", " ", atual.group(1)).replace("Art ", "Art. ")
+            rotulo = re.sub(r"\s+", " ", atual.group(1)).strip()
             trechos += _fatiar(rotulo, texto[atual.start() : fim])
         return trechos
     return [
@@ -122,7 +133,7 @@ def buscar(consulta: str, limite: int = 4, pasta: Path | None = None) -> list[di
     """Devolve os trechos mais relevantes para a consulta (ranking BM25)."""
     termos = {
         t for t in re.findall(r"\w+", consulta.lower())
-        if len(t) > 2 and t not in PALAVRAS_VAZIAS
+        if (len(t) > 2 or t.isdigit()) and t not in PALAVRAS_VAZIAS
     }
     if not termos:
         return []
@@ -139,3 +150,70 @@ def buscar(consulta: str, limite: int = 4, pasta: Path | None = None) -> list[di
             (expressao, limite),
         )
         return [dict(linha) for linha in linhas]
+
+
+def buscar_dispositivo(pedido: str, pasta: Path | None = None) -> dict | None:
+    """Encontra o artigo (e o inciso, se pedido) citado no pedido do usuário.
+
+    Devolve {"fonte", "rotulo", "texto", "inciso"}, onde "inciso" é o texto só do
+    inciso pedido (ou None), ou None se o pedido não cita artigo ou ele não está
+    nas fontes. Quando há várias fontes com o mesmo artigo, prefere a que tem no nome
+    algum número citado no pedido (ex.: "resolução 140/2018" → "...140...").
+    """
+    citado = PEDIDO_DISPOSITIVO.search(pedido)
+    if not citado:
+        return None
+    numero, letra, inciso, _paragrafo = citado.groups()
+    alvo = f"{numero}-{letra.upper()}" if letra else numero
+    numeros_no_pedido = set(re.findall(r"\d+", pedido)) - {numero}
+
+    with _conectar(pasta) as conexao:
+        linhas = conexao.execute(
+            """
+            SELECT trechos.rowid, trechos.fonte_id, fontes.nome AS fonte, trechos.rotulo, trechos.texto
+            FROM trechos JOIN fontes ON fontes.id = trechos.fonte_id
+            WHERE trechos.rotulo LIKE ?
+            ORDER BY trechos.rowid
+            """,
+            (f"Art. {numero}%",),
+        ).fetchall()
+    candidatos = [l for l in linhas if _numero_do_rotulo(l["rotulo"]) == alvo]
+    if not candidatos:
+        return None
+    candidatos.sort(key=lambda l: not any(n in l["fonte"] for n in numeros_no_pedido))
+    primeiro = candidatos[0]
+    # Um artigo longo vira vários trechos seguidos com o mesmo rótulo; junta só essa
+    # sequência (versões antigas do mesmo artigo, mais adiante no arquivo, ficam de fora).
+    partes, rowid = [], primeiro["rowid"]
+    for linha in candidatos:
+        if linha["fonte_id"] == primeiro["fonte_id"] and linha["rowid"] == rowid:
+            partes.append(linha["texto"])
+            rowid += 1
+    texto = "\n".join(partes)
+    return {
+        "fonte": primeiro["fonte"],
+        "rotulo": primeiro["rotulo"],
+        "texto": texto,
+        "inciso": extrair_inciso(texto, inciso) if inciso else None,
+    }
+
+
+def _numero_do_rotulo(rotulo: str) -> str:
+    achado = re.search(r"(\d+(?:-[A-Z])?)", rotulo)
+    return achado.group(1) if achado else ""
+
+
+def extrair_inciso(texto_artigo: str, inciso: str) -> str | None:
+    """Recorta o inciso (ex.: "V") do texto do artigo, até o próximo inciso ou parágrafo."""
+    inciso = inciso.upper()
+    inicios = list(INICIO_INCISO.finditer(texto_artigo))
+    for atual, proximo in zip(inicios, inicios[1:] + [None]):
+        if atual.group(1) != inciso:
+            continue
+        fim = proximo.start() if proximo else len(texto_artigo)
+        trecho = texto_artigo[atual.start() : fim]
+        # Para no primeiro parágrafo (§ ou "Parágrafo único") depois do inciso.
+        corte = re.search(r"^\s*(§|Parágrafo único)", trecho, re.MULTILINE)
+        trecho = trecho[: corte.start()] if corte else trecho
+        return re.sub(r"\s+", " ", trecho).strip()
+    return None
