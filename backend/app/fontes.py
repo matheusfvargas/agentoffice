@@ -6,6 +6,7 @@ Leis são divididas por artigo, para que o agente possa citar "Art. N" da fonte 
 
 import re
 import sqlite3
+import unicodedata
 from io import BytesIO
 from pathlib import Path
 
@@ -27,7 +28,26 @@ PEDIDO_DISPOSITIVO = re.compile(
     r"(?:\s*,?\s*(?:§|par[aá]grafo)\s*(\d+|[uú]nico))?",
     re.IGNORECASE,
 )
-INICIO_INCISO = re.compile(r"^\s*([IVXLC]+)\s*[-–—]\s*", re.MULTILINE)
+# Começo de cada parte de um artigo: inciso ("V -"), parágrafo ("§ 1º") ou "Parágrafo único".
+INICIO_PARTE = re.compile(
+    r"^\s*(?:([IVXLC]+)\s*[-–—]|(§\s*\d+\s*[º°o]?)|(Parágrafo único))", re.MULTILINE
+)
+# Pedido que fala de uma parte de artigo sem dizer qual artigo ("o inciso que trata
+# dos efeitos", "o parágrafo do artigo anterior"): vale o artigo citado logo acima.
+CITA_PARTE = re.compile(r"\b(incisos?|al[ií]neas?|caput)\b|§", re.IGNORECASE)
+CITA_ARTIGO_ANTERIOR = re.compile(
+    r"\b(artigo|par[aá]grafo)s?\b.*\b(anterior|acima|mesmo|desse|deste|citado)\b"
+    r"|\b(anterior|acima|mesmo|desse|deste|citado)\b.*\b(artigo|par[aá]grafo)s?\b",
+    re.IGNORECASE,
+)
+# Citação que o editor insere depois de um texto da fonte: "(Resolução ..., Art. 15, V)".
+CITACAO_NO_TEXTO = re.compile(r"\(([^()]*?),\s*Art\.\s*(\d+(?:-[A-Z])?)[^()]*\)")
+# Palavras do próprio pedido que não dizem nada sobre o assunto procurado.
+PALAVRAS_DE_COMANDO = {
+    "insir", "inser", "inclu", "coloq", "escre", "mostr", "trage", "incis", "artig", "parag",
+    "aline", "caput", "anter", "acima", "mesmo", "desse", "deste", "citad", "expli", "trata",
+    "sobre", "texto", "resol", "decre", "norma", "segui", "parte", "qual", "aquel",
+}
 PALAVRAS_VAZIAS = set(
     "a o as os de da do das dos em no na nos nas um uma uns umas e ou que com por para "
     "pelo pela pelos pelas se sobre como mais ao aos à às é ser foi são seu sua seus suas "
@@ -152,13 +172,31 @@ def buscar(consulta: str, limite: int = 4, pasta: Path | None = None) -> list[di
         return [dict(linha) for linha in linhas]
 
 
-def buscar_dispositivo(pedido: str, pasta: Path | None = None) -> dict | None:
+def citacao_anterior(contexto: str) -> str | None:
+    """Acha o artigo citado nos últimos parágrafos do documento.
+
+    Devolve um pedido equivalente, como "art. 15 140 22 05 2018" (o artigo mais os
+    números do nome da fonte, que ajudam a escolher a fonte certa), ou None.
+    """
+    paragrafos = [p for p in contexto.split("\n") if p.strip()]
+    for paragrafo in reversed(paragrafos[-3:]):
+        citacoes = list(CITACAO_NO_TEXTO.finditer(paragrafo))
+        if citacoes:
+            fonte, artigo = citacoes[-1].groups()
+            numeros = " ".join(re.findall(r"\d+", fonte))
+            return f"art. {artigo} {numeros}"
+    return None
+
+
+def buscar_dispositivo(pedido: str, descricao: str = "", pasta: Path | None = None) -> dict | None:
     """Encontra o artigo (e o inciso, se pedido) citado no pedido do usuário.
 
-    Devolve {"fonte", "rotulo", "texto", "inciso"}, onde "inciso" é o texto só do
-    inciso pedido (ou None), ou None se o pedido não cita artigo ou ele não está
-    nas fontes. Quando há várias fontes com o mesmo artigo, prefere a que tem no nome
-    algum número citado no pedido (ex.: "resolução 140/2018" → "...140...").
+    Devolve {"fonte", "rotulo", "texto", "inciso", "partes"} ou None se o pedido não
+    cita artigo ou ele não está nas fontes. "inciso" é o texto do inciso pedido pelo
+    número; "partes" são os incisos e parágrafos do artigo que tratam do assunto da
+    `descricao` (ex.: "o inciso que explica o efeito da exclusão"). Quando há várias
+    fontes com o mesmo artigo, prefere a que tem no nome algum número citado no
+    pedido (ex.: "resolução 140/2018" → "...140...").
     """
     citado = PEDIDO_DISPOSITIVO.search(pedido)
     if not citado:
@@ -195,6 +233,7 @@ def buscar_dispositivo(pedido: str, pasta: Path | None = None) -> dict | None:
         "rotulo": primeiro["rotulo"],
         "texto": texto,
         "inciso": extrair_inciso(texto, inciso) if inciso else None,
+        "partes": [] if inciso else partes_sobre(texto, descricao),
     }
 
 
@@ -203,17 +242,57 @@ def _numero_do_rotulo(rotulo: str) -> str:
     return achado.group(1) if achado else ""
 
 
-def extrair_inciso(texto_artigo: str, inciso: str) -> str | None:
-    """Recorta o inciso (ex.: "V") do texto do artigo, até o próximo inciso ou parágrafo."""
-    inciso = inciso.upper()
-    inicios = list(INICIO_INCISO.finditer(texto_artigo))
-    for atual, proximo in zip(inicios, inicios[1:] + [None]):
-        if atual.group(1) != inciso:
-            continue
+def dividir_partes(texto_artigo: str) -> list[tuple[str, str]]:
+    """Divide o artigo em (rótulo, texto): "caput", incisos ("V"), parágrafos ("§ 1º")
+    e incisos de parágrafo ("§ 1º, II")."""
+    marcas = list(INICIO_PARTE.finditer(texto_artigo))
+    fim_caput = marcas[0].start() if marcas else len(texto_artigo)
+    partes = [("caput", _limpar(texto_artigo[:fim_caput]))]
+    paragrafo_atual = None
+    for atual, proximo in zip(marcas, marcas[1:] + [None]):
+        inciso, paragrafo, unico = atual.groups()
+        if paragrafo or unico:
+            paragrafo_atual = re.sub(r"\s+", " ", paragrafo).strip() if paragrafo else "parágrafo único"
+            rotulo = paragrafo_atual
+        else:
+            rotulo = f"{paragrafo_atual}, {inciso}" if paragrafo_atual else inciso
         fim = proximo.start() if proximo else len(texto_artigo)
-        trecho = texto_artigo[atual.start() : fim]
-        # Para no primeiro parágrafo (§ ou "Parágrafo único") depois do inciso.
-        corte = re.search(r"^\s*(§|Parágrafo único)", trecho, re.MULTILINE)
-        trecho = trecho[: corte.start()] if corte else trecho
-        return re.sub(r"\s+", " ", trecho).strip()
-    return None
+        partes.append((rotulo, _limpar(texto_artigo[atual.start() : fim])))
+    return partes
+
+
+def extrair_inciso(texto_artigo: str, inciso: str) -> str | None:
+    """Texto do inciso do caput (ex.: "V"), sem os incisos e parágrafos seguintes."""
+    return next((t for r, t in dividir_partes(texto_artigo) if r == inciso.upper()), None)
+
+
+def partes_sobre(texto_artigo: str, descricao: str, limite: int = 2) -> list[tuple[str, str]]:
+    """Incisos e parágrafos do artigo que mais falam do assunto da descrição.
+
+    Compara radicais (5 primeiras letras, sem acento) e dá mais peso às palavras que
+    aparecem em poucas partes do artigo, que são as que distinguem uma parte da outra.
+    """
+    termos = _radicais(descricao) - PALAVRAS_DE_COMANDO
+    partes = [(r, t, _radicais(t)) for r, t in dividir_partes(texto_artigo) if r != "caput"]
+    if not termos or not partes:
+        return []
+    frequencia = {termo: sum(termo in radicais for _, _, radicais in partes) for termo in termos}
+    pontuadas = []
+    for rotulo, texto, radicais in partes:
+        pontos = sum(1 / frequencia[t] for t in termos & radicais)
+        if pontos:
+            pontuadas.append((pontos, rotulo, texto))
+    pontuadas.sort(key=lambda p: -p[0])
+    return [(rotulo, texto) for _, rotulo, texto in pontuadas[:limite]]
+
+
+def _radicais(texto: str) -> set[str]:
+    sem_acento = unicodedata.normalize("NFKD", texto.lower()).encode("ascii", "ignore").decode()
+    return {
+        palavra[:5] for palavra in re.findall(r"[a-z]+", sem_acento)
+        if len(palavra) > 3 and palavra not in PALAVRAS_VAZIAS
+    }
+
+
+def _limpar(texto: str) -> str:
+    return re.sub(r"\s+", " ", texto).strip()

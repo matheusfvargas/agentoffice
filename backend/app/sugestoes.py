@@ -99,18 +99,23 @@ def citacao(trecho: dict) -> str:
 def opcoes_literais(dispositivo: dict) -> list[str]:
     """Opções com o texto exato do dispositivo pedido, sem passar pelo modelo.
 
-    Com inciso: o inciso sozinho e o caput seguido do inciso. Sem inciso: o artigo inteiro.
+    Com inciso pedido pelo número: o inciso sozinho e o caput seguido do inciso.
+    Com partes escolhidas pelo assunto: cada parte. Sem nenhum dos dois: o artigo inteiro.
     """
     fonte = citacao({"fonte": dispositivo["fonte"], "rotulo": ""})
+    artigo = dispositivo["rotulo"]
     texto = re.sub(r"\s+", " ", dispositivo["texto"]).strip()
     inciso = dispositivo["inciso"]
-    if not inciso:
-        return [f"{texto} ({fonte})"]
-    caput = re.split(r"\s(?=[IVXLC]+\s*[-–—]\s)", texto, maxsplit=1)[0].strip()
-    return [
-        f"{inciso} ({fonte}, {dispositivo['rotulo']})",
-        f"{caput} {inciso} ({fonte})",
-    ]
+    if inciso:
+        numero = inciso.split()[0]
+        caput = re.split(r"\s(?=[IVXLC]+\s*[-–—]\s)", texto, maxsplit=1)[0].strip()
+        return [
+            f"{inciso} ({fonte}, {artigo}, {numero})",
+            f"{caput} {inciso} ({fonte})",
+        ]
+    if dispositivo.get("partes"):
+        return [f"{parte} ({fonte}, {artigo}, {rotulo})" for rotulo, parte in dispositivo["partes"]]
+    return [f"{texto} ({fonte})"]
 
 
 def extrair_opcoes(texto: str) -> list[str]:
