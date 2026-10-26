@@ -97,6 +97,9 @@ I - por opção;
 II - obrigatoriamente, quando incorrer em vedação;
 V - obrigatoriamente, quando ultrapassado o limite de receita bruta;
 § 1º A exclusão produzirá efeitos a partir do mês seguinte.
+§ 2º A comunicação será feita no Portal do Simples Nacional:
+I - em até 30 dias;
+II - por meio de aplicativo.
 Art. 16. Outro assunto.
 """
 
@@ -131,7 +134,7 @@ def test_endpoint_insere_texto_literal_do_inciso(monkeypatch):
     assert eventos[0]["fontes"][0] == "Resolução CGSN 140, Art. 15"
     assert eventos[1]["literais"] == 2
     final = eventos[-1]["opcoes"]
-    assert final[0] == "V - obrigatoriamente, quando ultrapassado o limite de receita bruta; (Resolução CGSN 140, Art. 15)"
+    assert final[0] == "V - obrigatoriamente, quando ultrapassado o limite de receita bruta; (Resolução CGSN 140, Art. 15, V)"
     assert final[1].startswith("Art. 15. A exclusão do Simples Nacional") and "V - obrigatoriamente" in final[1]
     assert "I - por opção" not in final[1]
     assert final[2] == "paráfrase"
@@ -150,3 +153,61 @@ def test_citacao_limpa_nome_de_arquivo_salvo_da_web():
 
     trecho = {"fonte": "Resolução CGSN Nº 140 DE 22_05_2018 - Federal - LegisWeb.pdf", "rotulo": "Art. 15"}
     assert citacao(trecho) == "Resolução CGSN Nº 140 DE 22/05/2018, Art. 15"
+
+
+def test_dividir_partes_do_artigo():
+    texto = fontes.dividir_em_trechos(RESOLUCAO)[2][1]
+    rotulos = [r for r, _ in fontes.dividir_partes(texto)]
+    assert rotulos == ["caput", "I", "II", "V", "§ 1º", "§ 2º", "§ 2º, I", "§ 2º, II"]
+    assert fontes.extrair_inciso(texto, "II").startswith("II - obrigatoriamente")
+
+
+def test_partes_sobre_o_assunto_pedido():
+    texto = fontes.dividir_em_trechos(RESOLUCAO)[2][1]
+    partes = fontes.partes_sobre(texto, "insira o inciso que explica o efeito da exclusão")
+    assert partes[0] == ("§ 1º", "§ 1º A exclusão produzirá efeitos a partir do mês seguinte.")
+    assert fontes.partes_sobre(texto, "insira o inciso do artigo anterior") == []
+
+
+def test_citacao_anterior():
+    contexto = (
+        "Título\nV - cujo titular participe (Lei Complementar nº 123, de 2006, art. 3º, § 4º) "
+        "(Resolução CGSN Nº 140 DE 22/05/2018, Art. 15, V)"
+    )
+    assert fontes.citacao_anterior(contexto) == "art. 15 140 22 05 2018"
+    assert fontes.citacao_anterior("Sem citação nenhuma.") is None
+
+
+def test_endpoint_usa_artigo_do_paragrafo_anterior(monkeypatch):
+    fontes.adicionar_fonte("Outra norma.txt", "Art. 15. Texto de outra norma.\n§ 1º Efeito da exclusão em outra norma.".encode())
+    fontes.adicionar_fonte("Resolução CGSN Nº 140 DE 22_05_2018 - Federal - LegisWeb.pdf.txt", RESOLUCAO.encode())
+    monkeypatch.setattr(main, "sugerir_em_partes", lambda *a, **k: iter([["paráfrase"]]))
+    contexto = "V - obrigatoriamente, quando ultrapassado o limite (Resolução CGSN Nº 140 DE 22/05/2018, Art. 15, V)"
+    resposta = TestClient(main.app).post(
+        "/api/sugestoes",
+        json={"instrucao": "insira o inciso que explica o efeito da exclusão do artigo anterior", "contexto": contexto},
+    )
+    eventos = [json.loads(l) for l in resposta.text.splitlines()]
+    final = eventos[-1]["opcoes"]
+    assert final[0] == (
+        "§ 1º A exclusão produzirá efeitos a partir do mês seguinte. "
+        "(Resolução CGSN Nº 140 DE 22/05/2018, Art. 15, § 1º)"
+    )
+    assert final[-1] == "paráfrase"
+
+
+def test_endpoint_avisa_sem_artigo_anterior(monkeypatch):
+    monkeypatch.setattr(main, "sugerir_em_partes", lambda *a, **k: iter([["x"]]))
+    resposta = TestClient(main.app).post(
+        "/api/sugestoes", json={"instrucao": "insira o parágrafo do artigo anterior", "contexto": "Texto livre."}
+    )
+    assert '"aviso": "Não achei um artigo citado nos parágrafos anteriores."' in resposta.text
+
+
+def test_pedido_comum_com_paragrafo_nao_busca_artigo(monkeypatch):
+    monkeypatch.setattr(main, "sugerir_em_partes", lambda *a, **k: iter([["x"]]))
+    contexto = "Algo (Resolução CGSN 140, Art. 15)"
+    resposta = TestClient(main.app).post(
+        "/api/sugestoes", json={"instrucao": "escreva um parágrafo de conclusão", "contexto": contexto}
+    )
+    assert "aviso" not in resposta.text and "literais" not in resposta.text

@@ -56,9 +56,19 @@ def criar_sugestoes(pedido: PedidoSugestao) -> StreamingResponse:
     avisos, literais = [], []
     # Pedido de um artigo específico ("insira art. 15, V da resolução 140"): o texto exato
     # vem direto da fonte, e o artigo vai na frente dos trechos enviados ao modelo.
+    # Sem artigo no pedido, mas falando de inciso/parágrafo ("o inciso que trata dos
+    # efeitos", "do artigo anterior"), vale o artigo citado nos parágrafos de cima.
+    consulta = pedido_texto
     citado = fontes.PEDIDO_DISPOSITIVO.search(pedido_texto)
+    if not citado and (fontes.CITA_PARTE.search(pedido_texto) or fontes.CITA_ARTIGO_ANTERIOR.search(pedido_texto)):
+        anterior = fontes.citacao_anterior(pedido.contexto)
+        if anterior:
+            consulta = anterior
+            citado = fontes.PEDIDO_DISPOSITIVO.search(anterior)
+        elif fontes.CITA_ARTIGO_ANTERIOR.search(pedido_texto):
+            avisos.append("Não achei um artigo citado nos parágrafos anteriores.")
     if citado:
-        dispositivo = fontes.buscar_dispositivo(pedido_texto)
+        dispositivo = fontes.buscar_dispositivo(consulta, descricao=pedido_texto)
         if dispositivo is None:
             avisos.append(f"Não encontrei o {citado.group(0).strip()} nas fontes adicionadas.")
         else:
