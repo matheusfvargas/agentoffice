@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>agentoffice</title>
+  <link rel="stylesheet" href="estilo.css">
+</head>
+<body>
+  <main>
+    <h1>agentoffice</h1>
+    <form id="form-tarefa">
+      <textarea id="tarefa" rows="4" placeholder="Ex.: Monte uma planilha de orçamento mensal de marketing com 5 categorias"></textarea>
+      <button type="submit">Gerar</button>
+    </form>
+    <section id="resultado" hidden>
+      <p id="resposta"></p>
+      <ul id="arquivos"></ul>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
