@@ -24,7 +24,19 @@
       Escreva e aperte <kbd>Ctrl</kbd>+<kbd>Espaço</kbd> para o agente sugerir como continuar o parágrafo.
       Para pedir algo, comece o parágrafo com <kbd>/</kbd>, por exemplo: <em>/escreva uma introdução sobre vendas no trimestre</em>.
     </p>
-    <div id="editor" class="pagina"></div>
+    <div class="area">
+      <div id="editor" class="pagina"></div>
+      <aside class="painel-fontes" aria-labelledby="titulo-fontes">
+        <h2 id="titulo-fontes">Fontes</h2>
+        <p class="dica">Adicione leis, normas ou manuais (PDF, DOCX ou TXT). O agente usa esses textos nas sugestões e cita a fonte e o artigo.</p>
+        <label class="botao-arquivo">
+          Adicionar fonte
+          <input id="arquivo-fonte" type="file" accept=".pdf,.docx,.txt,.md" multiple hidden>
+        </label>
+        <p id="status-fontes" class="status" role="status"></p>
+        <ul id="lista-fontes"></ul>
+      </aside>
+    </div>
   </main>
   <div id="sugestoes" class="sugestoes" hidden></div>
   <script type="module" src="/src/main.js"></script>

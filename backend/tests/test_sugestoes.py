@@ -50,7 +50,7 @@ def test_sugerir_com_instrucao():
 
 
 def test_endpoint_envia_ndjson(monkeypatch):
-    monkeypatch.setattr(main, "sugerir_em_partes", lambda *a: iter([["A"], ["A", "B"]]))
+    monkeypatch.setattr(main, "sugerir_em_partes", lambda *a, **k: iter([["A"], ["A", "B"]]))
     resposta = TestClient(main.app).post("/api/sugestoes", json={"paragrafo": "Oi"})
     linhas = [json.loads(l) for l in resposta.text.splitlines()]
     assert resposta.headers["content-type"].startswith("application/x-ndjson")
@@ -58,7 +58,7 @@ def test_endpoint_envia_ndjson(monkeypatch):
 
 
 def test_endpoint_envia_erro_do_modelo(monkeypatch):
-    def falha(*_):
+    def falha(*_, **__):
         raise ConnectionError("recusado")
         yield
 

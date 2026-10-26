@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -10,7 +10,8 @@ from pydantic import BaseModel
 from . import config
 from .agente import executar_tarefa
 from .exportar import documento_para_docx
-from .sugestoes import sugerir_em_partes
+from . import fontes
+from .sugestoes import citacao, sugerir_em_partes
 
 app = FastAPI(title="agentoffice")
 
@@ -49,14 +50,41 @@ def criar_sugestoes(pedido: PedidoSugestao) -> StreamingResponse:
     if not (pedido.paragrafo.strip() or (pedido.instrucao or "").strip()):
         raise HTTPException(status_code=400, detail="Escreva algo no parágrafo antes de pedir sugestões.")
 
+    # Busca nas fontes pelo pedido ou pelo parágrafo, mais o fim do documento como apoio.
+    consulta = f"{pedido.instrucao or pedido.paragrafo} {pedido.contexto[-300:]}"
+    trechos = fontes.buscar(consulta)
+
     def eventos():
+        if trechos:
+            yield json.dumps({"fontes": [citacao(t) for t in trechos]}, ensure_ascii=False) + "\n"
         try:
-            for opcoes in sugerir_em_partes(pedido.paragrafo, pedido.contexto, pedido.instrucao):
+            partes = sugerir_em_partes(pedido.paragrafo, pedido.contexto, pedido.instrucao, trechos=trechos)
+            for opcoes in partes:
                 yield json.dumps({"opcoes": opcoes}, ensure_ascii=False) + "\n"
         except Exception as erro:  # o status 200 já foi enviado; o erro vai como evento
             yield json.dumps({"erro": f"Falha ao falar com o modelo: {erro}"}, ensure_ascii=False) + "\n"
 
     return StreamingResponse(eventos(), media_type="application/x-ndjson")
+
+
+@app.get("/api/fontes")
+def listar_fontes() -> list[dict]:
+    return fontes.listar_fontes()
+
+
+@app.post("/api/fontes")
+async def adicionar_fonte(arquivo: UploadFile) -> dict:
+    try:
+        return fontes.adicionar_fonte(arquivo.filename or "fonte.txt", await arquivo.read())
+    except fontes.FonteInvalida as erro:
+        raise HTTPException(status_code=400, detail=str(erro))
+
+
+@app.delete("/api/fontes/{fonte_id}")
+def remover_fonte(fonte_id: int) -> dict:
+    if not fontes.remover_fonte(fonte_id):
+        raise HTTPException(status_code=404, detail="Fonte não encontrada.")
+    return {"ok": True}
 
 
 class PedidoExportacao(BaseModel):
