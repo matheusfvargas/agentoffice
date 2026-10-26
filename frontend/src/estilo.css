@@ -1,0 +1,55 @@
+:root {
+  --fundo: #f3f3f1;
+  --papel: #ffffff;
+  --texto: #1f1f1f;
+  --suave: #6b6b6b;
+  --borda: #dcdcd8;
+  --destaque: #2d5be3;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--fundo); color: var(--texto); font-family: system-ui, sans-serif; }
+
+.barra {
+  position: sticky; top: 0; z-index: 2;
+  display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center;
+  padding: 10px 16px; background: var(--papel); border-bottom: 1px solid var(--borda);
+}
+#nome-documento { font: inherit; font-weight: 600; border: 1px solid transparent; border-radius: 6px; padding: 4px 8px; }
+#nome-documento:hover, #nome-documento:focus { border-color: var(--borda); }
+.ferramentas { display: flex; flex-wrap: wrap; gap: 4px; }
+.ferramentas button {
+  font: inherit; font-size: 14px; padding: 4px 10px; cursor: pointer;
+  background: none; border: 1px solid var(--borda); border-radius: 6px;
+}
+.ferramentas button:hover { background: var(--fundo); }
+.ferramentas .destaque { background: var(--destaque); border-color: var(--destaque); color: #fff; }
+
+main { max-width: 816px; margin: 24px auto; padding: 0 16px; }
+.dica { color: var(--suave); font-size: 14px; }
+kbd { font-size: 12px; padding: 1px 5px; border: 1px solid var(--borda); border-radius: 4px; background: var(--fundo); }
+
+.pagina { background: var(--papel); min-height: 900px; padding: 64px 72px; box-shadow: 0 1px 3px rgb(0 0 0 / 12%); }
+.tiptap { outline: none; line-height: 1.6; }
+.tiptap p.is-editor-empty:first-child::before,
+.tiptap p.is-empty::before { content: attr(data-placeholder); color: #aaa; float: left; height: 0; pointer-events: none; }
+.tiptap table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+.tiptap td, .tiptap th { border: 1px solid var(--borda); padding: 6px 8px; vertical-align: top; }
+.tiptap th { background: var(--fundo); text-align: left; }
+
+.sugestoes {
+  position: absolute; z-index: 3; width: 480px; max-width: calc(100vw - 32px);
+  background: var(--papel); border: 1px solid var(--borda); border-radius: 10px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 14%); padding: 8px;
+}
+.sugestoes ol { list-style: none; margin: 0; padding: 0; }
+.sugestoes li button {
+  display: block; width: 100%; text-align: left; font: inherit; font-size: 14px; line-height: 1.45;
+  padding: 8px; background: none; border: 0; border-radius: 6px; cursor: pointer;
+}
+.sugestoes li button:hover { background: var(--fundo); }
+.sugestoes .carregando, .sugestoes .atalhos { color: var(--suave); font-size: 13px; margin: 6px 8px; }
+.sugestoes .erro { color: #b3261e; font-size: 14px; margin: 6px 8px; }
+
+@media (max-width: 600px) {
+  .pagina { padding: 32px 20px; }
+}
