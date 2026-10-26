@@ -46,7 +46,8 @@ kbd { font-size: 12px; padding: 1px 5px; border: 1px solid var(--borda); border-
   display: block; width: 100%; text-align: left; font: inherit; font-size: 14px; line-height: 1.45;
   padding: 8px; background: none; border: 0; border-radius: 6px; cursor: pointer;
 }
-.sugestoes li button:hover { background: var(--fundo); }
+.sugestoes li button:hover:not(:disabled) { background: var(--fundo); }
+.sugestoes li button.escrevendo { color: var(--suave); cursor: default; }
 .sugestoes .carregando, .sugestoes .atalhos { color: var(--suave); font-size: 13px; margin: 6px 8px; }
 .sugestoes .erro { color: #b3261e; font-size: 14px; margin: 6px 8px; }
 
