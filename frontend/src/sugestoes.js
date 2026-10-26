@@ -5,7 +5,7 @@
 // - começa com "/": o resto é uma instrução e a opção escolhida substitui o parágrafo.
 
 export function criarPainelSugestoes(editor, elemento) {
-  let estado = null; // { de, ate, modo, opcoes, terminou, cancelar }
+  let estado = null; // { de, ate, modo, opcoes, fontes, terminou, cancelar }
 
   function blocoAtual() {
     const { $from } = editor.state.selection;
@@ -27,6 +27,7 @@ export function criarPainelSugestoes(editor, elemento) {
       ate,
       modo: instrucao ? "substituir" : "continuar",
       opcoes: [],
+      fontes: [],
       terminou: false,
       cancelar: new AbortController(),
     };
@@ -47,7 +48,8 @@ export function criarPainelSugestoes(editor, elemento) {
       }
       for await (const evento of lerEventos(resposta)) {
         if (evento.erro) throw new Error(evento.erro);
-        atual.opcoes = evento.opcoes;
+        if (evento.fontes) atual.fontes = evento.fontes;
+        if (evento.opcoes) atual.opcoes = evento.opcoes;
         if (estado === atual) renderizarOpcoes();
       }
       atual.terminou = true;
@@ -78,7 +80,10 @@ export function criarPainelSugestoes(editor, elemento) {
     const rodape = estado.terminou
       ? `<kbd>1</kbd>–<kbd>${estado.opcoes.length}</kbd> escolhe · <kbd>Esc</kbd> fecha`
       : "Escrevendo… · <kbd>Esc</kbd> fecha";
-    mostrar(`<ol>${itens}</ol><p class="atalhos">${rodape}</p>`);
+    const fontes = estado.fontes.length
+      ? `<p class="fontes-usadas">Consultou: ${estado.fontes.map(escapar).join("; ")}</p>`
+      : "";
+    mostrar(`<ol>${itens}</ol>${fontes}<p class="atalhos">${rodape}</p>`);
   }
 
   function aplicar(indice) {

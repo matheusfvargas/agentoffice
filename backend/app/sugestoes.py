@@ -27,6 +27,12 @@ O usuário pediu, para este ponto do documento: {instrucao}
 
 Escreva {n} versões do parágrafo pedido. Cada opção é o parágrafo completo, em uma única linha."""
 
+PROMPT_FONTES = """Trechos das fontes do usuário que podem ser relevantes:
+{trechos}
+
+Quando usar uma informação desses trechos, cite a fonte no fim da frase, no formato ({rotulo_exemplo}).
+Use só o que está nos trechos; não invente artigos, números ou leis."""
+
 MAX_CONTEXTO = 6000
 MARCADOR_OPCAO = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
 
@@ -36,13 +42,15 @@ def sugerir_em_partes(
     contexto: str = "",
     instrucao: str | None = None,
     n: int = 3,
+    trechos: list[dict] | None = None,
     cliente: OpenAI | None = None,
 ) -> Iterator[list[str]]:
     """Pede ao modelo `n` opções para o parágrafo atual e devolve a lista parcial
     a cada trecho recebido, para a tela mostrar as opções enquanto são escritas.
 
     Sem `instrucao`, as opções continuam o parágrafo; com `instrucao`, cada opção
-    é um parágrafo novo que atende ao pedido.
+    é um parágrafo novo que atende ao pedido. `trechos` são passagens das fontes
+    do usuário (veja `fontes.buscar`) que o modelo deve usar e citar.
     """
     cliente = cliente or criar_cliente()
     # Mantém só o final do documento: é o trecho mais relevante para o parágrafo atual.
@@ -51,6 +59,11 @@ def sugerir_em_partes(
         pedido = PROMPT_INSTRUCAO.format(contexto=contexto, instrucao=instrucao, n=n)
     else:
         pedido = PROMPT_CONTINUAR.format(contexto=contexto, paragrafo=paragrafo, n=n)
+    if trechos:
+        pedido += "\n\n" + PROMPT_FONTES.format(
+            trechos="\n\n".join(f"[{citacao(t)}]\n{t['texto']}" for t in trechos),
+            rotulo_exemplo=citacao(trechos[0]),
+        )
 
     fluxo = cliente.chat.completions.create(
         model=config.MODELO,
@@ -71,6 +84,12 @@ def sugerir_em_partes(
         if opcoes != ultimas:
             ultimas = opcoes
             yield opcoes
+
+
+def citacao(trecho: dict) -> str:
+    """Como o trecho é citado no texto, ex.: "Lei 8.112, Art. 5º"."""
+    nome = re.sub(r"\.(pdf|docx|txt|md)$", "", trecho["fonte"], flags=re.IGNORECASE)
+    return f"{nome}, {trecho['rotulo']}" if trecho["rotulo"] else nome
 
 
 def extrair_opcoes(texto: str) -> list[str]:
