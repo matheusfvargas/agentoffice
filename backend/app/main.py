@@ -11,7 +11,7 @@ from . import config
 from .agente import executar_tarefa
 from .exportar import documento_para_docx
 from . import fontes
-from .sugestoes import citacao, sugerir_em_partes
+from .sugestoes import citacao, opcoes_literais, sugerir_em_partes
 
 app = FastAPI(title="agentoffice")
 
@@ -51,16 +51,35 @@ def criar_sugestoes(pedido: PedidoSugestao) -> StreamingResponse:
         raise HTTPException(status_code=400, detail="Escreva algo no parágrafo antes de pedir sugestões.")
 
     # Busca nas fontes pelo pedido ou pelo parágrafo, mais o fim do documento como apoio.
-    consulta = f"{pedido.instrucao or pedido.paragrafo} {pedido.contexto[-300:]}"
-    trechos = fontes.buscar(consulta)
+    pedido_texto = pedido.instrucao or pedido.paragrafo
+    trechos = fontes.buscar(f"{pedido_texto} {pedido.contexto[-300:]}")
+    avisos, literais = [], []
+    # Pedido de um artigo específico ("insira art. 15, V da resolução 140"): o texto exato
+    # vem direto da fonte, e o artigo vai na frente dos trechos enviados ao modelo.
+    citado = fontes.PEDIDO_DISPOSITIVO.search(pedido_texto)
+    if citado:
+        dispositivo = fontes.buscar_dispositivo(pedido_texto)
+        if dispositivo is None:
+            avisos.append(f"Não encontrei o {citado.group(0).strip()} nas fontes adicionadas.")
+        else:
+            if dispositivo["inciso"] is None and citado.group(3):
+                avisos.append(f"Encontrei o {dispositivo['rotulo']}, mas não o inciso pedido; mostrei o artigo inteiro.")
+            literais = opcoes_literais(dispositivo)
+            trechos = [dispositivo] + [t for t in trechos if t["rotulo"] != dispositivo["rotulo"]][:3]
 
     def eventos():
         if trechos:
-            yield json.dumps({"fontes": [citacao(t) for t in trechos]}, ensure_ascii=False) + "\n"
+            citacoes = list(dict.fromkeys(citacao(t) for t in trechos))
+            yield json.dumps({"fontes": citacoes}, ensure_ascii=False) + "\n"
+        for aviso in avisos:
+            yield json.dumps({"aviso": aviso}, ensure_ascii=False) + "\n"
+        if literais:
+            yield json.dumps({"literais": len(literais), "opcoes": literais}, ensure_ascii=False) + "\n"
         try:
-            partes = sugerir_em_partes(pedido.paragrafo, pedido.contexto, pedido.instrucao, trechos=trechos)
+            n = max(1, 3 - len(literais))
+            partes = sugerir_em_partes(pedido.paragrafo, pedido.contexto, pedido.instrucao, n=n, trechos=trechos)
             for opcoes in partes:
-                yield json.dumps({"opcoes": opcoes}, ensure_ascii=False) + "\n"
+                yield json.dumps({"opcoes": literais + opcoes}, ensure_ascii=False) + "\n"
         except Exception as erro:  # o status 200 já foi enviado; o erro vai como evento
             yield json.dumps({"erro": f"Falha ao falar com o modelo: {erro}"}, ensure_ascii=False) + "\n"
 

@@ -84,3 +84,69 @@ def test_endpoints_de_fontes(monkeypatch):
     assert cliente.post("/api/fontes", files={"arquivo": ("x.xlsx", b"", "application/octet-stream")}).status_code == 400
     assert cliente.delete(f"/api/fontes/{fonte_id}").status_code == 200
     assert cliente.delete(f"/api/fontes/{fonte_id}").status_code == 404
+
+
+# Trecho no formato de um PDF salvo do LegisWeb: quebras de linha no meio de frases
+# (uma linha começa com "art." minúsculo) e incisos em linhas próprias.
+RESOLUCAO = """RESOLUÇÃO CGSN Nº 140, DE 22 DE MAIO DE 2018
+Dispõe sobre o Simples Nacional.
+Art. 14. A ME ou a EPP pode ser excluída, observado o disposto no
+art. 15 desta Resolução.
+Art. 15. A exclusão do Simples Nacional, mediante comunicação da ME ou da EPP à RFB, dar-se-á:
+I - por opção;
+II - obrigatoriamente, quando incorrer em vedação;
+V - obrigatoriamente, quando ultrapassado o limite de receita bruta;
+§ 1º A exclusão produzirá efeitos a partir do mês seguinte.
+Art. 16. Outro assunto.
+"""
+
+
+def test_quebra_de_linha_com_art_minusculo_nao_vira_artigo():
+    rotulos = [r for r, _ in fontes.dividir_em_trechos(RESOLUCAO)]
+    assert rotulos == ["Preâmbulo", "Art. 14", "Art. 15", "Art. 16"]
+
+
+def test_buscar_dispositivo_com_inciso():
+    fontes.adicionar_fonte("Outra norma.txt", "Art. 15. Texto de outra norma.\nArt. 16. Fim.".encode())
+    fontes.adicionar_fonte("Resolução CGSN 140 de 2018.pdf.txt", RESOLUCAO.encode())
+    achado = fontes.buscar_dispositivo("insira art. 15, V da resolução 140/2018")
+    assert achado["fonte"].startswith("Resolução CGSN 140")
+    assert achado["inciso"] == "V - obrigatoriamente, quando ultrapassado o limite de receita bruta;"
+    assert fontes.buscar_dispositivo("artigo 15 inciso II da 140")["inciso"].startswith("II - obrigatoriamente")
+    assert fontes.buscar_dispositivo("art. 99")is None
+    assert fontes.buscar_dispositivo("escreva uma introdução") is None
+
+
+def test_numeros_curtos_entram_na_busca():
+    fontes.adicionar_fonte("Resolução 140.txt", RESOLUCAO.encode())
+    assert fontes.buscar("art 15")[0]["rotulo"] in {"Art. 15", "Art. 14"}
+
+
+def test_endpoint_insere_texto_literal_do_inciso(monkeypatch):
+    fontes.adicionar_fonte("Resolução CGSN 140.txt", RESOLUCAO.encode())
+    monkeypatch.setattr(main, "sugerir_em_partes", lambda *a, **k: iter([["paráfrase"]]))
+    cliente = TestClient(main.app)
+    resposta = cliente.post("/api/sugestoes", json={"instrucao": "insira art. 15, V da resolução 140/2018"})
+    eventos = [json.loads(l) for l in resposta.text.splitlines()]
+    assert eventos[0]["fontes"][0] == "Resolução CGSN 140, Art. 15"
+    assert eventos[1]["literais"] == 2
+    final = eventos[-1]["opcoes"]
+    assert final[0] == "V - obrigatoriamente, quando ultrapassado o limite de receita bruta; (Resolução CGSN 140, Art. 15)"
+    assert final[1].startswith("Art. 15. A exclusão do Simples Nacional") and "V - obrigatoriamente" in final[1]
+    assert "I - por opção" not in final[1]
+    assert final[2] == "paráfrase"
+
+
+def test_endpoint_avisa_artigo_inexistente(monkeypatch):
+    fontes.adicionar_fonte("Resolução CGSN 140.txt", RESOLUCAO.encode())
+    monkeypatch.setattr(main, "sugerir_em_partes", lambda *a, **k: iter([["x"]]))
+    resposta = TestClient(main.app).post("/api/sugestoes", json={"instrucao": "insira art. 99"})
+    avisos = [json.loads(l)["aviso"] for l in resposta.text.splitlines() if "aviso" in l]
+    assert avisos == ["Não encontrei o art. 99 nas fontes adicionadas."]
+
+
+def test_citacao_limpa_nome_de_arquivo_salvo_da_web():
+    from app.sugestoes import citacao
+
+    trecho = {"fonte": "Resolução CGSN Nº 140 DE 22_05_2018 - Federal - LegisWeb.pdf", "rotulo": "Art. 15"}
+    assert citacao(trecho) == "Resolução CGSN Nº 140 DE 22/05/2018, Art. 15"

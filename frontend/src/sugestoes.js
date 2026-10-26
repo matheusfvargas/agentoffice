@@ -5,7 +5,7 @@
 // - começa com "/": o resto é uma instrução e a opção escolhida substitui o parágrafo.
 
 export function criarPainelSugestoes(editor, elemento) {
-  let estado = null; // { de, ate, modo, opcoes, fontes, terminou, cancelar }
+  let estado = null; // { de, ate, modo, opcoes, fontes, avisos, literais, terminou, cancelar }
 
   function blocoAtual() {
     const { $from } = editor.state.selection;
@@ -28,6 +28,8 @@ export function criarPainelSugestoes(editor, elemento) {
       modo: instrucao ? "substituir" : "continuar",
       opcoes: [],
       fontes: [],
+      avisos: [],
+      literais: 0,
       terminou: false,
       cancelar: new AbortController(),
     };
@@ -47,8 +49,15 @@ export function criarPainelSugestoes(editor, elemento) {
         throw new Error(dados.detail || "Erro ao gerar sugestões.");
       }
       for await (const evento of lerEventos(resposta)) {
-        if (evento.erro) throw new Error(evento.erro);
+        if (evento.erro) {
+          // Com o texto da fonte já na tela, a falha do modelo não apaga as opções.
+          if (!atual.opcoes.length) throw new Error(evento.erro);
+          atual.avisos.push(evento.erro);
+          continue;
+        }
         if (evento.fontes) atual.fontes = evento.fontes;
+        if (evento.aviso) atual.avisos.push(evento.aviso);
+        if (evento.literais) atual.literais = evento.literais;
         if (evento.opcoes) atual.opcoes = evento.opcoes;
         if (estado === atual) renderizarOpcoes();
       }
@@ -67,14 +76,17 @@ export function criarPainelSugestoes(editor, elemento) {
   }
 
   function renderizarOpcoes() {
+    const avisos = estado.avisos.map((a) => `<p class="aviso">${escapar(a)}</p>`).join("");
     if (!estado.opcoes.length) {
-      if (estado.terminou) mostrar('<p class="erro">O agente não trouxe sugestões. Tente de novo.</p>');
+      if (estado.terminou) mostrar(`${avisos}<p class="erro">O agente não trouxe sugestões. Tente de novo.</p>`);
+      else if (avisos) mostrar(`${avisos}<p class="carregando">Pensando…</p>`);
       return;
     }
     const itens = estado.opcoes
       .map((opcao, i) => {
         const escrevendo = i >= prontas();
-        return `<li><button data-indice="${i}" ${escrevendo ? 'disabled class="escrevendo"' : ""}><kbd>${i + 1}</kbd> ${escapar(opcao)}</button></li>`;
+        const selo = i < estado.literais ? '<span class="selo">texto da fonte</span> ' : "";
+        return `<li><button data-indice="${i}" ${escrevendo ? 'disabled class="escrevendo"' : ""}><kbd>${i + 1}</kbd> ${selo}${escapar(opcao)}</button></li>`;
       })
       .join("");
     const rodape = estado.terminou
@@ -83,7 +95,7 @@ export function criarPainelSugestoes(editor, elemento) {
     const fontes = estado.fontes.length
       ? `<p class="fontes-usadas">Consultou: ${estado.fontes.map(escapar).join("; ")}</p>`
       : "";
-    mostrar(`<ol>${itens}</ol>${fontes}<p class="atalhos">${rodape}</p>`);
+    mostrar(`${avisos}<ol>${itens}</ol>${fontes}<p class="atalhos">${rodape}</p>`);
   }
 
   function aplicar(indice) {

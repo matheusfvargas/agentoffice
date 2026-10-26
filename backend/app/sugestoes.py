@@ -89,7 +89,28 @@ def sugerir_em_partes(
 def citacao(trecho: dict) -> str:
     """Como o trecho é citado no texto, ex.: "Lei 8.112, Art. 5º"."""
     nome = re.sub(r"\.(pdf|docx|txt|md)$", "", trecho["fonte"], flags=re.IGNORECASE)
+    # Nomes de arquivos salvos de sites trazem sufixos ("... - Federal - LegisWeb") e
+    # datas com "_" no lugar de "/" ("22_05_2018"); fica só o nome da norma.
+    nome = nome.split(" - ")[0].strip()
+    nome = re.sub(r"(\d{1,2})_(\d{1,2})_(\d{4})", r"\1/\2/\3", nome)
     return f"{nome}, {trecho['rotulo']}" if trecho["rotulo"] else nome
+
+
+def opcoes_literais(dispositivo: dict) -> list[str]:
+    """Opções com o texto exato do dispositivo pedido, sem passar pelo modelo.
+
+    Com inciso: o inciso sozinho e o caput seguido do inciso. Sem inciso: o artigo inteiro.
+    """
+    fonte = citacao({"fonte": dispositivo["fonte"], "rotulo": ""})
+    texto = re.sub(r"\s+", " ", dispositivo["texto"]).strip()
+    inciso = dispositivo["inciso"]
+    if not inciso:
+        return [f"{texto} ({fonte})"]
+    caput = re.split(r"\s(?=[IVXLC]+\s*[-–—]\s)", texto, maxsplit=1)[0].strip()
+    return [
+        f"{inciso} ({fonte}, {dispositivo['rotulo']})",
+        f"{caput} {inciso} ({fonte})",
+    ]
 
 
 def extrair_opcoes(texto: str) -> list[str]:
