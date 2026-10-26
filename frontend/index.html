@@ -4,20 +4,29 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>agentoffice</title>
-  <link rel="stylesheet" href="estilo.css">
 </head>
 <body>
+  <header class="barra">
+    <input id="nome-documento" value="Documento sem título" aria-label="Nome do documento">
+    <div class="ferramentas" id="ferramentas">
+      <button data-comando="h1" title="Título">T1</button>
+      <button data-comando="h2" title="Subtítulo">T2</button>
+      <button data-comando="negrito" title="Negrito (Ctrl+B)"><b>N</b></button>
+      <button data-comando="italico" title="Itálico (Ctrl+I)"><i>I</i></button>
+      <button data-comando="lista" title="Lista">• Lista</button>
+      <button data-comando="tabela" title="Inserir tabela">Tabela</button>
+      <button data-comando="sugerir" class="destaque" title="Pedir sugestões (Ctrl+Espaço)">Sugerir</button>
+      <button data-comando="exportar" title="Baixar como .docx">Exportar .docx</button>
+    </div>
+  </header>
   <main>
-    <h1>agentoffice</h1>
-    <form id="form-tarefa">
-      <textarea id="tarefa" rows="4" placeholder="Ex.: Monte uma planilha de orçamento mensal de marketing com 5 categorias"></textarea>
-      <button type="submit">Gerar</button>
-    </form>
-    <section id="resultado" hidden>
-      <p id="resposta"></p>
-      <ul id="arquivos"></ul>
-    </section>
+    <p class="dica">
+      Escreva e aperte <kbd>Ctrl</kbd>+<kbd>Espaço</kbd> para o agente sugerir como continuar o parágrafo.
+      Para pedir algo, comece o parágrafo com <kbd>/</kbd>, por exemplo: <em>/escreva uma introdução sobre vendas no trimestre</em>.
+    </p>
+    <div id="editor" class="pagina"></div>
   </main>
-  <script src="app.js"></script>
+  <div id="sugestoes" class="sugestoes" hidden></div>
+  <script type="module" src="/src/main.js"></script>
 </body>
 </html>

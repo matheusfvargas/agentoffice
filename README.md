@@ -1,15 +1,21 @@
 # agentoffice
 
-Ferramentas de escritório com um agente de IA integrado. O usuário descreve a tarefa e o agente gera um documento (.docx), uma planilha (.xlsx) ou uma apresentação (.pptx).
+Editor de documentos com um agente de IA integrado. Enquanto escreve, o usuário pede ao agente opções para completar o parágrafo atual, ou descreve o que quer naquele ponto e escolhe entre as versões sugeridas. O documento é exportado para .docx.
 
-## Como funciona
+## Como usar o editor
 
-1. O frontend (`frontend/`) envia a tarefa para `POST /api/tarefa`.
-2. O backend (`backend/app/agente.py`) manda a tarefa ao modelo com três ferramentas: `criar_documento`, `criar_planilha` e `criar_apresentacao`.
-3. O modelo devolve só o conteúdo em JSON; o código Python (`backend/app/ferramentas/`) monta o arquivo.
-4. O arquivo fica disponível em `/api/arquivos/<nome>`.
+- **Completar um parágrafo:** escreva o começo e aperte `Ctrl+Espaço` (ou o botão *Sugerir*). O agente mostra 3 continuações; escolha com `1`, `2`, `3` ou com o mouse. `Esc` fecha.
+- **Pedir algo:** comece o parágrafo com `/` e descreva o que quer, por exemplo `/escreva uma introdução sobre as vendas do trimestre`. A opção escolhida substitui o pedido.
+- **Exportar:** o botão *Exportar .docx* baixa o documento com títulos, listas, negrito, itálico e tabelas.
 
-O backend usa a API compatível com a OpenAI, então funciona com Ollama, llama.cpp, vLLM ou um provedor na nuvem. Para trocar de modelo, basta mudar as variáveis de ambiente.
+## Estrutura
+
+- `frontend/`: editor em JavaScript com [TipTap](https://tiptap.dev) e Vite. O painel de sugestões fica em `src/sugestoes.js`.
+- `backend/app/sugestoes.py`: monta o pedido ao modelo e lê as opções em JSON (`POST /api/sugestoes`).
+- `backend/app/exportar.py`: converte o documento do editor para .docx (`POST /api/exportar/docx`).
+- `backend/app/agente.py` e `backend/app/ferramentas/`: agente que gera arquivos inteiros a partir de uma tarefa (`POST /api/tarefa`). Fica como base para os próximos editores, como o de slides.
+
+O backend usa a API compatível com a OpenAI, então funciona com Ollama, llama.cpp, vLLM ou um provedor na nuvem. Para trocar de modelo, basta mudar as variáveis de ambiente (veja `backend/.env.example`).
 
 ## Rodando localmente
 
@@ -24,9 +30,16 @@ pip install -r requirements.txt
 cp .env.example .env   # ajuste se for usar outro modelo
 set -a && source .env && set +a
 uvicorn app.main:app --reload
+
+# 3. Frontend (em outro terminal)
+cd frontend
+npm install
+npm run dev
 ```
 
-Abra http://localhost:8000 e descreva uma tarefa.
+Abra http://localhost:5173. O Vite repassa as chamadas `/api` para o backend na porta 8000.
+
+Para servir tudo pelo backend, rode `npm run build` em `frontend/` e abra http://localhost:8000.
 
 ## Testes
 
