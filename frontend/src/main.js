@@ -3,6 +3,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { TableKit } from "@tiptap/extension-table";
 import { Placeholder } from "@tiptap/extensions";
 
+import { iniciarFontes } from "./fontes.js";
 import { criarPainelSugestoes } from "./sugestoes.js";
 import "./estilo.css";
 
@@ -18,6 +19,7 @@ const editor = new Editor({
 });
 
 const painel = criarPainelSugestoes(editor, document.getElementById("sugestoes"));
+iniciarFontes();
 
 editor.view.dom.addEventListener("keydown", (evento) => {
   if (evento.ctrlKey && evento.code === "Space") {
