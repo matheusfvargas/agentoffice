@@ -1,15 +1,16 @@
+import json
 from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import config
 from .agente import executar_tarefa
 from .exportar import documento_para_docx
-from .sugestoes import sugerir
+from .sugestoes import sugerir_em_partes
 
 app = FastAPI(title="agentoffice")
 
@@ -42,16 +43,20 @@ class PedidoSugestao(BaseModel):
     instrucao: str | None = None
 
 
-class RespostaSugestao(BaseModel):
-    opcoes: list[str]
-
-
-@app.post("/api/sugestoes", response_model=RespostaSugestao)
-def criar_sugestoes(pedido: PedidoSugestao) -> RespostaSugestao:
+@app.post("/api/sugestoes")
+def criar_sugestoes(pedido: PedidoSugestao) -> StreamingResponse:
+    """Devolve as opções em NDJSON: uma linha {"opcoes": [...]} a cada atualização."""
     if not (pedido.paragrafo.strip() or (pedido.instrucao or "").strip()):
         raise HTTPException(status_code=400, detail="Escreva algo no parágrafo antes de pedir sugestões.")
-    opcoes = sugerir(pedido.paragrafo, pedido.contexto, pedido.instrucao)
-    return RespostaSugestao(opcoes=opcoes)
+
+    def eventos():
+        try:
+            for opcoes in sugerir_em_partes(pedido.paragrafo, pedido.contexto, pedido.instrucao):
+                yield json.dumps({"opcoes": opcoes}, ensure_ascii=False) + "\n"
+        except Exception as erro:  # o status 200 já foi enviado; o erro vai como evento
+            yield json.dumps({"erro": f"Falha ao falar com o modelo: {erro}"}, ensure_ascii=False) + "\n"
+
+    return StreamingResponse(eventos(), media_type="application/x-ndjson")
 
 
 class PedidoExportacao(BaseModel):

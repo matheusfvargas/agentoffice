@@ -5,7 +5,7 @@
 // - começa com "/": o resto é uma instrução e a opção escolhida substitui o parágrafo.
 
 export function criarPainelSugestoes(editor, elemento) {
-  let estado = null; // { de, ate, modo, opcoes }
+  let estado = null; // { de, ate, modo, opcoes, terminou, cancelar }
 
   function blocoAtual() {
     const { $from } = editor.state.selection;
@@ -21,7 +21,16 @@ export function criarPainelSugestoes(editor, elemento) {
     const instrucao = texto.startsWith("/") ? texto.slice(1).trim() : null;
     if (!texto.trim() || instrucao === "") return;
 
-    estado = { de, ate, modo: instrucao ? "substituir" : "continuar", opcoes: [] };
+    estado?.cancelar.abort();
+    const atual = {
+      de,
+      ate,
+      modo: instrucao ? "substituir" : "continuar",
+      opcoes: [],
+      terminou: false,
+      cancelar: new AbortController(),
+    };
+    estado = atual;
     posicionar(ate);
     mostrar('<p class="carregando">Pensando…</p>');
 
@@ -30,31 +39,51 @@ export function criarPainelSugestoes(editor, elemento) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ paragrafo: instrucao ? "" : texto, contexto, instrucao }),
+        signal: atual.cancelar.signal,
       });
-      const dados = await resposta.json();
-      if (!resposta.ok) throw new Error(dados.detail || "Erro ao gerar sugestões.");
-      if (!estado) return; // o usuário fechou o painel enquanto esperava
-      estado.opcoes = dados.opcoes;
-      renderizarOpcoes();
+      if (!resposta.ok) {
+        const dados = await resposta.json();
+        throw new Error(dados.detail || "Erro ao gerar sugestões.");
+      }
+      for await (const evento of lerEventos(resposta)) {
+        if (evento.erro) throw new Error(evento.erro);
+        atual.opcoes = evento.opcoes;
+        if (estado === atual) renderizarOpcoes();
+      }
+      atual.terminou = true;
+      if (estado === atual) renderizarOpcoes();
     } catch (erro) {
-      mostrar(`<p class="erro">${escapar(erro.message)}</p>`);
+      if (erro.name !== "AbortError" && estado === atual) {
+        mostrar(`<p class="erro">${escapar(erro.message)}</p>`);
+      }
     }
+  }
+
+  // Quantas opções já estão completas: durante o stream, a última ainda está sendo escrita.
+  function prontas() {
+    return estado.terminou ? estado.opcoes.length : Math.max(0, estado.opcoes.length - 1);
   }
 
   function renderizarOpcoes() {
     if (!estado.opcoes.length) {
-      mostrar('<p class="erro">O agente não trouxe sugestões. Tente de novo.</p>');
+      if (estado.terminou) mostrar('<p class="erro">O agente não trouxe sugestões. Tente de novo.</p>');
       return;
     }
     const itens = estado.opcoes
-      .map((opcao, i) => `<li><button data-indice="${i}"><kbd>${i + 1}</kbd> ${escapar(opcao)}</button></li>`)
+      .map((opcao, i) => {
+        const escrevendo = i >= prontas();
+        return `<li><button data-indice="${i}" ${escrevendo ? 'disabled class="escrevendo"' : ""}><kbd>${i + 1}</kbd> ${escapar(opcao)}</button></li>`;
+      })
       .join("");
-    mostrar(`<ol>${itens}</ol><p class="atalhos"><kbd>1</kbd>–<kbd>${estado.opcoes.length}</kbd> escolhe · <kbd>Esc</kbd> fecha</p>`);
+    const rodape = estado.terminou
+      ? `<kbd>1</kbd>–<kbd>${estado.opcoes.length}</kbd> escolhe · <kbd>Esc</kbd> fecha`
+      : "Escrevendo… · <kbd>Esc</kbd> fecha";
+    mostrar(`<ol>${itens}</ol><p class="atalhos">${rodape}</p>`);
   }
 
   function aplicar(indice) {
-    const opcao = estado?.opcoes[indice];
-    if (!opcao) return;
+    if (!estado || indice >= prontas()) return;
+    const opcao = estado.opcoes[indice];
     const { de, ate, modo } = estado;
     const cadeia = editor.chain().focus();
     if (modo === "substituir") {
@@ -69,6 +98,7 @@ export function criarPainelSugestoes(editor, elemento) {
   }
 
   function fechar() {
+    estado?.cancelar.abort();
     estado = null;
     elemento.hidden = true;
   }
@@ -96,6 +126,7 @@ export function criarPainelSugestoes(editor, elemento) {
       evento.preventDefault();
       fechar();
     } else if (/^[1-9]$/.test(evento.key) && estado.opcoes.length) {
+      // Com opções na tela, os números escolhem; uma opção ainda sendo escrita é ignorada.
       evento.preventDefault();
       aplicar(Number(evento.key) - 1);
     }
@@ -106,6 +137,21 @@ export function criarPainelSugestoes(editor, elemento) {
   });
 
   return { abrir, fechar };
+}
+
+// Lê a resposta NDJSON do backend, um objeto por linha, conforme chega.
+async function* lerEventos(resposta) {
+  const leitor = resposta.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = "";
+  while (true) {
+    const { value, done } = await leitor.read();
+    if (done) break;
+    buffer += value;
+    const linhas = buffer.split("\n");
+    buffer = linhas.pop();
+    for (const linha of linhas) if (linha.trim()) yield JSON.parse(linha);
+  }
+  if (buffer.trim()) yield JSON.parse(buffer);
 }
 
 function escapar(texto) {

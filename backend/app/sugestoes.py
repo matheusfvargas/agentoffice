@@ -1,5 +1,5 @@
-import json
 import re
+from collections.abc import Iterator
 
 from openai import OpenAI
 
@@ -9,7 +9,8 @@ from .agente import criar_cliente
 PROMPT_SISTEMA = """Você é um assistente de escrita dentro de um editor de documentos.
 Você recebe o documento até agora e o parágrafo em que o usuário está escrevendo.
 Escreva em português do Brasil, no mesmo tom do documento.
-Responda SOMENTE com JSON no formato {"opcoes": ["...", "...", "..."]}, com {n} opções diferentes entre si."""
+Responda SOMENTE com {n} opções diferentes entre si, uma por linha, cada linha começando com "- ".
+Não escreva nada antes nem depois das opções."""
 
 PROMPT_CONTINUAR = """Documento até agora:
 {contexto}
@@ -24,19 +25,21 @@ PROMPT_INSTRUCAO = """Documento até agora:
 
 O usuário pediu, para este ponto do documento: {instrucao}
 
-Escreva {n} versões do parágrafo pedido. Cada opção é o parágrafo completo."""
+Escreva {n} versões do parágrafo pedido. Cada opção é o parágrafo completo, em uma única linha."""
 
 MAX_CONTEXTO = 6000
+MARCADOR_OPCAO = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+")
 
 
-def sugerir(
+def sugerir_em_partes(
     paragrafo: str,
     contexto: str = "",
     instrucao: str | None = None,
     n: int = 3,
     cliente: OpenAI | None = None,
-) -> list[str]:
-    """Pede ao modelo `n` opções para o parágrafo atual.
+) -> Iterator[list[str]]:
+    """Pede ao modelo `n` opções para o parágrafo atual e devolve a lista parcial
+    a cada trecho recebido, para a tela mostrar as opções enquanto são escritas.
 
     Sem `instrucao`, as opções continuam o parágrafo; com `instrucao`, cada opção
     é um parágrafo novo que atende ao pedido.
@@ -49,27 +52,39 @@ def sugerir(
     else:
         pedido = PROMPT_CONTINUAR.format(contexto=contexto, paragrafo=paragrafo, n=n)
 
-    resposta = cliente.chat.completions.create(
+    fluxo = cliente.chat.completions.create(
         model=config.MODELO,
         messages=[
-            {"role": "system", "content": PROMPT_SISTEMA.replace("{n}", str(n))},
+            {"role": "system", "content": PROMPT_SISTEMA.format(n=n)},
             {"role": "user", "content": pedido},
         ],
-        response_format={"type": "json_object"},
         temperature=0.8,
+        stream=True,
     )
-    return extrair_opcoes(resposta.choices[0].message.content or "")[:n]
+    texto = ""
+    ultimas: list[str] = []
+    for parte in fluxo:
+        if not parte.choices:
+            continue
+        texto += parte.choices[0].delta.content or ""
+        opcoes = extrair_opcoes(texto)[:n]
+        if opcoes != ultimas:
+            ultimas = opcoes
+            yield opcoes
 
 
 def extrair_opcoes(texto: str) -> list[str]:
-    """Lê a lista de opções da resposta, tolerando texto extra ao redor do JSON."""
-    texto = re.sub(r"<think>.*?</think>", "", texto, flags=re.DOTALL)
-    inicio, fim = texto.find("{"), texto.rfind("}")
-    if inicio == -1 or fim <= inicio:
-        return []
-    try:
-        dados = json.loads(texto[inicio : fim + 1])
-    except json.JSONDecodeError:
-        return []
-    opcoes = dados.get("opcoes", []) if isinstance(dados, dict) else []
-    return [o.strip() for o in opcoes if isinstance(o, str) and o.strip()]
+    """Lê as opções (uma por linha) do texto recebido até agora.
+
+    Ignora o raciocínio entre <think> e </think>, inclusive um bloco ainda aberto,
+    e aceita linhas com "-", "*", "•" ou numeradas.
+    """
+    texto = re.sub(r"<think>.*?(</think>|$)", "", texto, flags=re.DOTALL)
+    opcoes = []
+    for linha in texto.splitlines():
+        if MARCADOR_OPCAO.match(linha):
+            opcoes.append(MARCADOR_OPCAO.sub("", linha, count=1).strip())
+        elif opcoes and linha.strip():
+            # Linha sem marcador continua a opção anterior (modelo quebrou a linha).
+            opcoes[-1] = f"{opcoes[-1]} {linha.strip()}"
+    return [o for o in opcoes if o]
