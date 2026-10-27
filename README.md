@@ -7,6 +7,7 @@ Editor de documentos com um agente de IA integrado. Enquanto escreve, o usuário
 - **Completar um parágrafo:** escreva o começo e aperte `Ctrl+Espaço` (ou o botão *Sugerir*). O agente mostra 3 continuações; escolha com `1`, `2`, `3` ou com o mouse. `Esc` fecha.
 - **Pedir algo:** comece o parágrafo com `/` e descreva o que quer, por exemplo `/escreva uma introdução sobre as vendas do trimestre`. A opção escolhida substitui o pedido.
 - **Usar suas fontes:** no painel *Fontes*, adicione leis, normas ou manuais (PDF, DOCX ou TXT). A cada pedido, o agente busca os trechos mais relevantes, usa esse conteúdo nas opções e cita a fonte e o artigo, por exemplo *(Lei 8.112, Art. 5º)*. O painel de sugestões mostra quais trechos foram consultados.
+- **Revisão de gramática:** os erros aparecem sublinhados enquanto você escreve (vermelho: ortografia; azul: gramática; cinza: estilo). Clique no trecho para ver a explicação e escolher a correção, ou *Ignorar*. O idioma é detectado sozinho, ou pode ser escolhido na barra de cima. Usa o [LanguageTool](https://languagetool.org) rodando no seu computador (veja abaixo).
 - **Exportar:** o botão *Exportar .docx* baixa o documento com títulos, listas, negrito, itálico e tabelas.
 
 ## Estrutura
@@ -14,6 +15,7 @@ Editor de documentos com um agente de IA integrado. Enquanto escreve, o usuário
 - `frontend/`: editor em JavaScript com [TipTap](https://tiptap.dev) e Vite. O painel de sugestões fica em `src/sugestoes.js`.
 - `backend/app/sugestoes.py`: monta o pedido ao modelo e lê as opções em JSON (`POST /api/sugestoes`).
 - `backend/app/fontes.py`: lê os arquivos de fontes, divide leis por artigo e guarda os trechos num índice de busca do SQLite (FTS5) em `backend/dados/` (`/api/fontes`).
+- `backend/app/revisao.py` + `frontend/src/revisao.js`: revisão de gramática pelo LanguageTool (`POST /api/revisao`), com os erros sublinhados no editor.
 - `backend/app/exportar.py`: converte o documento do editor para .docx (`POST /api/exportar/docx`).
 - `backend/app/agente.py` e `backend/app/ferramentas/`: agente que gera arquivos inteiros a partir de uma tarefa (`POST /api/tarefa`). Fica como base para os próximos editores, como o de slides.
 
@@ -39,7 +41,23 @@ npm install
 npm run dev
 ```
 
-Abra http://localhost:5173. O Vite repassa as chamadas `/api` para o backend na porta 8000.
+Abra http://localhost:5173.
+
+### Revisor de gramática (opcional)
+
+O revisor usa o LanguageTool, que roda localmente e não manda seu texto para fora. Sem ele, o editor funciona normalmente e só mostra o aviso de revisor indisponível. Escolha uma das formas:
+
+```bash
+# Com Docker
+docker run -d --name languagetool -p 8081:8010 erikvl87/languagetool
+
+# Ou com Java 17+ (sem Docker)
+wget https://languagetool.org/download/LanguageTool-stable.zip
+unzip LanguageTool-stable.zip && cd LanguageTool-*/
+java -cp languagetool-server.jar org.languagetool.server.HTTPServer --port 8081 --allow-origin
+```
+
+O backend procura o LanguageTool em `http://localhost:8081` (variável `AGENTOFFICE_LANGUAGETOOL_URL`). O Vite repassa as chamadas `/api` para o backend na porta 8000.
 
 Para servir tudo pelo backend, rode `npm run build` em `frontend/` e abra http://localhost:8000.
 

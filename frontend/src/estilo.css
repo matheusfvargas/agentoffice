@@ -82,3 +82,26 @@ kbd { font-size: 12px; padding: 1px 5px; border: 1px solid var(--borda); border-
 #lista-fontes small { display: block; color: var(--suave); }
 #lista-fontes button { font: inherit; font-size: 13px; background: none; border: 0; color: var(--suave); cursor: pointer; }
 #lista-fontes button:hover { color: #b3261e; }
+
+.revisao-controles { display: flex; align-items: center; gap: 8px; font-size: 14px; margin-left: auto; }
+.revisao-controles select { font: inherit; font-size: 13px; padding: 3px 6px; border: 1px solid var(--borda); border-radius: 6px; background: var(--papel); }
+.revisao-controles .status { color: var(--suave); font-size: 13px; }
+.revisao-controles .status.erro { color: #b3261e; }
+
+.erro-revisao { text-decoration: underline wavy; text-decoration-thickness: 1px; text-underline-offset: 3px; cursor: pointer; }
+.erro-ortografia { text-decoration-color: #d93025; }
+.erro-gramatica { text-decoration-color: #1a73e8; }
+.erro-estilo { text-decoration-color: #9aa0a6; }
+
+.revisao-popover {
+  position: absolute; z-index: 4; width: 320px; max-width: calc(100vw - 32px);
+  background: var(--papel); border: 1px solid var(--borda); border-radius: 10px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 14%); padding: 10px; font-size: 14px;
+}
+.revisao-popover .mensagem { margin: 0 0 8px; color: var(--texto); }
+.revisao-popover .opcoes-revisao { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.revisao-popover .opcoes-revisao button {
+  font: inherit; font-weight: 600; padding: 4px 10px; cursor: pointer;
+  background: #e8f0fe; color: var(--destaque); border: 0; border-radius: 6px;
+}
+.revisao-popover .ignorar { font: inherit; font-size: 13px; background: none; border: 0; color: var(--suave); cursor: pointer; padding: 0; }
