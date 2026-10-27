@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from . import config
 from .agente import executar_tarefa
 from .exportar import documento_para_docx
-from . import fontes
+from . import fontes, revisao
 from .sugestoes import citacao, opcoes_literais, sugerir_em_partes
 
 app = FastAPI(title="agentoffice")
@@ -114,6 +114,21 @@ def remover_fonte(fonte_id: int) -> dict:
     if not fontes.remover_fonte(fonte_id):
         raise HTTPException(status_code=404, detail="Fonte não encontrada.")
     return {"ok": True}
+
+
+class PedidoRevisao(BaseModel):
+    texto: str
+    idioma: str = "auto"
+
+
+@app.post("/api/revisao")
+def revisar_texto(pedido: PedidoRevisao) -> dict:
+    if not pedido.texto.strip():
+        return {"idioma": None, "erros": []}
+    try:
+        return revisao.revisar(pedido.texto, pedido.idioma)
+    except revisao.RevisorIndisponivel as erro:
+        raise HTTPException(status_code=503, detail=str(erro))
 
 
 class PedidoExportacao(BaseModel):

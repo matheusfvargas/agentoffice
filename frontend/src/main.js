@@ -4,6 +4,7 @@ import { TableKit } from "@tiptap/extension-table";
 import { Placeholder } from "@tiptap/extensions";
 
 import { iniciarFontes } from "./fontes.js";
+import { Revisao, iniciarRevisao } from "./revisao.js";
 import { criarPainelSugestoes } from "./sugestoes.js";
 import "./estilo.css";
 
@@ -13,6 +14,7 @@ const editor = new Editor({
     StarterKit,
     TableKit.configure({ table: { resizable: false } }),
     Placeholder.configure({ placeholder: "Comece a escrever, ou digite / e peça algo ao agente…" }),
+    Revisao,
   ],
   content: "<h1>Documento sem título</h1><p></p>",
   autofocus: "end",
@@ -20,6 +22,12 @@ const editor = new Editor({
 
 const painel = criarPainelSugestoes(editor, document.getElementById("sugestoes"));
 iniciarFontes();
+iniciarRevisao(editor, {
+  popover: document.getElementById("revisao-popover"),
+  ativa: document.getElementById("revisao-ativa"),
+  seletorIdioma: document.getElementById("revisao-idioma"),
+  status: document.getElementById("revisao-status"),
+});
 
 editor.view.dom.addEventListener("keydown", (evento) => {
   if (evento.ctrlKey && evento.code === "Space") {

@@ -18,6 +18,19 @@
       <button data-comando="sugerir" class="destaque" title="Pedir sugestões (Ctrl+Espaço)">Sugerir</button>
       <button data-comando="exportar" title="Baixar como .docx">Exportar .docx</button>
     </div>
+    <div class="revisao-controles">
+      <label><input type="checkbox" id="revisao-ativa" checked> Revisão</label>
+      <select id="revisao-idioma" aria-label="Idioma da revisão">
+        <option value="auto">Detectar idioma</option>
+        <option value="pt-BR">Português (Brasil)</option>
+        <option value="pt-PT">Português (Portugal)</option>
+        <option value="en-US">English (US)</option>
+        <option value="es">Español</option>
+        <option value="fr">Français</option>
+        <option value="de-DE">Deutsch</option>
+      </select>
+      <span id="revisao-status" class="status" role="status"></span>
+    </div>
   </header>
   <main>
     <p class="dica">
@@ -39,6 +52,7 @@
     </div>
   </main>
   <div id="sugestoes" class="sugestoes" hidden></div>
+  <div id="revisao-popover" class="revisao-popover" hidden></div>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>
