@@ -11,6 +11,7 @@ from . import config
 from .agente import executar_tarefa
 from .exportar import documento_para_docx
 from . import fontes, revisao
+from .autocompletar import completar
 from .sugestoes import citacao, opcoes_literais, sugerir_em_partes
 
 app = FastAPI(title="agentoffice")
@@ -114,6 +115,22 @@ def remover_fonte(fonte_id: int) -> dict:
     if not fontes.remover_fonte(fonte_id):
         raise HTTPException(status_code=404, detail="Fonte não encontrada.")
     return {"ok": True}
+
+
+class PedidoCompletar(BaseModel):
+    texto: str
+    contexto: str = ""
+
+
+@app.post("/api/completar")
+def completar_texto(pedido: PedidoCompletar) -> dict:
+    """Continuação curta para o texto fantasma que aparece enquanto o usuário digita."""
+    if not pedido.texto.strip():
+        return {"sugestao": ""}
+    try:
+        return {"sugestao": completar(pedido.texto, pedido.contexto)}
+    except Exception as erro:
+        raise HTTPException(status_code=502, detail=f"Falha ao falar com o modelo: {erro}")
 
 
 class PedidoRevisao(BaseModel):

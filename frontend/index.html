@@ -19,6 +19,7 @@
       <button data-comando="exportar" title="Baixar como .docx">Exportar .docx</button>
     </div>
     <div class="revisao-controles">
+      <label title="Mostra em cinza como continuar o parágrafo; Tab aceita"><input type="checkbox" id="autocompletar-ativo" checked> Autocompletar</label>
       <label><input type="checkbox" id="revisao-ativa" checked> Revisão</label>
       <select id="revisao-idioma" aria-label="Idioma da revisão">
         <option value="auto">Detectar idioma</option>
@@ -36,6 +37,7 @@
     <p class="dica">
       Escreva e aperte <kbd>Ctrl</kbd>+<kbd>Espaço</kbd> para o agente sugerir como continuar o parágrafo.
       Para pedir algo, comece o parágrafo com <kbd>/</kbd>, por exemplo: <em>/escreva uma introdução sobre vendas no trimestre</em>.
+      Com o autocompletar ligado, a continuação aparece em cinza quando você para de digitar: <kbd>Tab</kbd> aceita e <kbd>Esc</kbd> descarta.
     </p>
     <div class="area">
       <div id="editor" class="pagina"></div>
