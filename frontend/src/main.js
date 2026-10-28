@@ -18,6 +18,9 @@ const editor = new Editor({
   ],
   content: "<h1>Documento sem título</h1><p></p>",
   autofocus: "end",
+  // O corretor do navegador costuma usar o dicionário em inglês e sublinha
+  // palavras corretas em português; quem revisa é o LanguageTool.
+  editorProps: { attributes: { spellcheck: "false" } },
 });
 
 const painel = criarPainelSugestoes(editor, document.getElementById("sugestoes"));
