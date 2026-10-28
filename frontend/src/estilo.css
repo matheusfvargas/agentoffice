@@ -105,3 +105,5 @@ kbd { font-size: 12px; padding: 1px 5px; border: 1px solid var(--borda); border-
   background: #e8f0fe; color: var(--destaque); border: 0; border-radius: 6px;
 }
 .revisao-popover .ignorar { font: inherit; font-size: 13px; background: none; border: 0; color: var(--suave); cursor: pointer; padding: 0; }
+
+.autocompletar-fantasma { color: var(--suave); pointer-events: none; white-space: pre-wrap; }
