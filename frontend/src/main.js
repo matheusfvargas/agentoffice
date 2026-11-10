@@ -3,6 +3,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { TableKit } from "@tiptap/extension-table";
 import { Placeholder } from "@tiptap/extensions";
 
+import { Autocompletar, iniciarAutocompletar } from "./autocompletar.js";
 import { iniciarFontes } from "./fontes.js";
 import { Revisao, iniciarRevisao } from "./revisao.js";
 import { criarPainelSugestoes } from "./sugestoes.js";
@@ -15,6 +16,7 @@ const editor = new Editor({
     TableKit.configure({ table: { resizable: false } }),
     Placeholder.configure({ placeholder: "Comece a escrever, ou digite / e peça algo ao agente…" }),
     Revisao,
+    Autocompletar,
   ],
   content: "<h1>Documento sem título</h1><p></p>",
   autofocus: "end",
@@ -32,9 +34,15 @@ iniciarRevisao(editor, {
   status: document.getElementById("revisao-status"),
 });
 
+const autocompletar = iniciarAutocompletar(editor, {
+  ativa: document.getElementById("autocompletar-ativo"),
+  ocupado: () => !document.getElementById("sugestoes").hidden,
+});
+
 editor.view.dom.addEventListener("keydown", (evento) => {
   if (evento.ctrlKey && evento.code === "Space") {
     evento.preventDefault();
+    autocompletar.descartar();
     painel.abrir();
   }
 });
@@ -46,7 +54,10 @@ const comandos = {
   italico: () => editor.chain().focus().toggleItalic().run(),
   lista: () => editor.chain().focus().toggleBulletList().run(),
   tabela: () => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
-  sugerir: () => painel.abrir(),
+  sugerir: () => {
+    autocompletar.descartar();
+    painel.abrir();
+  },
   exportar: exportarDocx,
 };
 

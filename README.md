@@ -5,6 +5,7 @@ Editor de documentos com um agente de IA integrado. Enquanto escreve, o usuário
 ## Como usar o editor
 
 - **Completar um parágrafo:** escreva o começo e aperte `Ctrl+Espaço` (ou o botão *Sugerir*). O agente mostra 3 continuações; escolha com `1`, `2`, `3` ou com o mouse. `Esc` fecha.
+- **Autocompletar:** ao parar de digitar no fim de um parágrafo, a continuação aparece em cinza depois do cursor. `Tab` aceita, `Esc` descarta, e continuar digitando as mesmas letras mantém o resto. Liga e desliga na barra de cima. A sugestão é curta (até o fim da frase) e pede ao Qwen3 para não raciocinar, para chegar mais rápido.
 - **Pedir algo:** comece o parágrafo com `/` e descreva o que quer, por exemplo `/escreva uma introdução sobre as vendas do trimestre`. A opção escolhida substitui o pedido.
 - **Usar suas fontes:** no painel *Fontes*, adicione leis, normas ou manuais (PDF, DOCX ou TXT). A cada pedido, o agente busca os trechos mais relevantes, usa esse conteúdo nas opções e cita a fonte e o artigo, por exemplo *(Lei 8.112, Art. 5º)*. O painel de sugestões mostra quais trechos foram consultados.
 - **Revisão de gramática:** os erros aparecem sublinhados enquanto você escreve (vermelho: ortografia; azul: gramática; cinza: estilo). Clique no trecho para ver a explicação e escolher a correção, ou *Ignorar*. O idioma é detectado sozinho, ou pode ser escolhido na barra de cima. Usa o [LanguageTool](https://languagetool.org) rodando no seu computador (veja abaixo).
@@ -15,6 +16,7 @@ Editor de documentos com um agente de IA integrado. Enquanto escreve, o usuário
 - `frontend/`: editor em JavaScript com [TipTap](https://tiptap.dev) e Vite. O painel de sugestões fica em `src/sugestoes.js`.
 - `backend/app/sugestoes.py`: monta o pedido ao modelo e lê as opções em JSON (`POST /api/sugestoes`).
 - `backend/app/fontes.py`: lê os arquivos de fontes, divide leis por artigo e guarda os trechos num índice de busca do SQLite (FTS5) em `backend/dados/` (`/api/fontes`).
+- `backend/app/autocompletar.py` + `frontend/src/autocompletar.js`: texto fantasma enquanto você digita (`POST /api/completar`).
 - `backend/app/revisao.py` + `frontend/src/revisao.js`: revisão de gramática pelo LanguageTool (`POST /api/revisao`), com os erros sublinhados no editor.
 - `backend/app/exportar.py`: converte o documento do editor para .docx (`POST /api/exportar/docx`).
 - `backend/app/agente.py` e `backend/app/ferramentas/`: agente que gera arquivos inteiros a partir de uma tarefa (`POST /api/tarefa`). Fica como base para os próximos editores, como o de slides.
